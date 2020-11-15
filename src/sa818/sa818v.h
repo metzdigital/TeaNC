@@ -1,7 +1,7 @@
 #ifndef sa818v_h
 #define sa818v_h
 
-//#define RADIO_DEBUG
+#define RADIO_DEBUG
 
 #define RADIO_SERIAL_RX_BUF_LEN 60
 #define RADIO_SERIAL_TX_BUF_LEN 30
@@ -15,7 +15,6 @@
 #define RADIO_CMD_SET_TAIL  "AT+SETTAIL"
 #define RADIO_CMD_GET_RSSI  "RSSI"
 #define RADIO_CMD_GET_VER   "AT+VERSION"
-
 
 #define RADIO_BANDWIDTH_12500_HZ 0
 #define RADIO_BANDWIDTH_25000_HZ 1
@@ -32,6 +31,13 @@
 #define RADIO_FILT_ENABLE 0
 
 #define RADIO_SQUELCH_OPEN 0
+
+#define RADIO_TX_STATE 	LOW
+#define RADIO_RX_STATE 	HIGH
+
+#define RADIO_PWR_ON_STATE 	HIGH
+#define RADIO_PWR_OFF_STATE LOW
+
 
 struct RadioCfg{
   uint8_t bandwidth;
@@ -51,13 +57,17 @@ struct FiltCfg{
 
 class Radio {
   public: 
-    Radio();
+    Radio(HardwareSerial *streamObj);
     ~Radio();
     
-    void setControlSerial(Stream *streamObj) { ControlSerial = streamObj; controlSerialAttached=true; }
-    void setLogSerial(Stream *streamObj) { LogSerial = streamObj; logSerialAttached=true; }  
+    void setControlSerial(HardwareSerial *streamObj) { ControlSerial = streamObj; controlSerialAttached=true; }
+    void setLogSerial(HardwareSerial *streamObj) { LogSerial = streamObj; logSerialAttached=true; }  
     
     void connect();
+	void transmitMode();
+	void receiveMode();
+	void powerOff();
+	void powerOn();
     void setConfig(uint8_t bandwidth, double txf, double rxf, char* tx_subaudio, uint8_t squelch, char* rx_subaudio);
     void setConfig(RadioCfg cfg);
     void scanFreq(double rxf);
@@ -73,15 +83,15 @@ class Radio {
     FiltCfg filtCfg;
   
   private:  
-    Stream *ControlSerial;
-    Stream *LogSerial;
+    HardwareSerial *ControlSerial;
+    HardwareSerial *LogSerial;
     char serialTxBuf[RADIO_SERIAL_TX_BUF_LEN] = {0};
     char serialRxBuf[RADIO_SERIAL_RX_BUF_LEN] = {0};
     uint8_t serialTxLen = 0;
     uint8_t serialRxLen = 0;
     bool controlSerialAttached = false;
     bool logSerialAttached = false;
-  
+	bool isPowered = false;
     void sendCmd();
     void receiveReply();
 };
