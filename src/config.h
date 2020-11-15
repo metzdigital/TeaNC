@@ -1,6 +1,14 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
+
+//Return types
+typedef enum{
+	SUCCESS=0,
+	FAILURE,
+	TIMEOUT
+} RetStatus_t;
+
 //User related IO assignments
 #define USER_LED_PIN 5
 #define USER_PUSH_BTN1_PIN 39
@@ -9,12 +17,10 @@
 //Power sources voltage sense pin
 #define PWR_SENSE_V_PIN 4
 
-
 //Display IO Assignments 
 #define DISPLAY_ENABLE_PIN 19
 #define DISPLAY_I2C_SCL_PIN 22
 #define DISPLAY_I2C_SDA_PIN 21
-
 
 //GPS IO Assignments 
 #define GPS_UART_RX_PIN 27
@@ -29,5 +35,7 @@
 #define VHF_AOUT_PIN 25
 #define VHF_AIN_PIN 36
 
+
+RetStatus_t configIO(void);
 
 #endif 

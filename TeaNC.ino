@@ -2,56 +2,54 @@
 #include "src/config.h"
 #include "src/sa818/sa818v.h"
 
-#define VHF_TX_STATE LOW
-#define VHF_RX_STATE HIGH
-#define VHF_PWR_ON  HIGH
-#define VHF_PWR_OFF  LOW
 
-#define CHAR_LF 0x0A
-
+HardwareSerial *SerialUSB;
 HardwareSerial *SerialGPS;
+HardwareSerial *SerialVHF;
 
 void setup() {
-  //Setup the GPS pin modes
-  pinMode(GPS_UART_TX_PIN, OUTPUT);
-  pinMode(GPS_UART_RX_PIN, INPUT);
-  pinMode(GPS_PPS_PIN, INPUT);
-
-  //Setup the VHF pin modes
-  pinMode(VHF_UART_TX_PIN, OUTPUT);
-  pinMode(VHF_UART_RX_PIN, INPUT);
-  pinMode(VHF_RX_TXN_PIN, OUTPUT);
-  pinMode(VHF_PWR_DOWN_PIN, OUTPUT);
-
-  //User push buttons and LED
-  pinMode(USER_LED_PIN, OUTPUT);
-  pinMode(USER_PUSH_BTN1_PIN, INPUT);
-  pinMode(USER_PUSH_BTN2_PIN, INPUT);
-
-  //Display pin modes
-  pinMode(DISPLAY_ENABLE_PIN, OUTPUT);
-
-    
-  Serial.begin(115200);
-  Serial1.begin(9600, SERIAL_8N1, GPS_UART_RX_PIN, GPS_UART_TX_PIN);
-  Serial2.begin(9600, SERIAL_8N1, VHF_UART_RX_PIN, VHF_UART_TX_PIN);
-
-  Serial.println("ESP32 GPS testing");
-  digitalWrite(USER_LED_PIN, HIGH);
-  digitalWrite(VHF_PWR_DOWN_PIN, VHF_PWR_ON);
-  digitalWrite(VHF_RX_TXN_PIN, VHF_RX_STATE);
-  delay(1000);
-
+  //setup IO that doesn't have a lib yet
+  configIO();
   
-  Serial2.println("AT+DMOCONNECT");
-  char ret = '\0';
-  while(ret != CHAR_LF){
-    if(Serial2.available()){
-      ret = Serial2.read();
-      Serial.write(ret);
-    }
-  }
-  Serial2.println("AT+DMOSETGROUP=1,145.0000,145.0000,0000,1,0000");
+  SerialUSB = &Serial;
+  SerialGPS = &Serial1;
+  SerialVHF = &Serial2;
+    
+  SerialUSB->begin(115200);
+  SerialGPS->begin(9600, SERIAL_8N1, GPS_UART_RX_PIN, GPS_UART_TX_PIN);
+
+  SerialUSB->println("ESP32 GPS testing");
+  digitalWrite(USER_LED_PIN, HIGH);
+  
+  Radio vhf(&Serial2);
+  vhf.setLogSerial(&Serial);
+  SerialUSB->println("SA818 Connect to VHF");
+  vhf.connect();
+  
+  Serial.println("SA818 Radio Version");
+  vhf.getVer();
+  
+  struct RadioCfg cfg = {
+    bandwidth:    RADIO_BANDWIDTH_12500_HZ,
+    txf:          145.000,
+    rxf:          145.000,
+    tx_subaudio:  RADIO_CTCS_DISABLE,
+    squelch:      0,
+    rx_subaudio:  RADIO_CTCS_DISABLE
+  };
+  
+  SerialUSB->println("SA818 Config VHF");
+  vhf.setConfig(cfg);
+
+  SerialUSB->println("SA818 Config Filters");
+  struct FiltCfg fcfg = {
+    enableEmph:   RADIO_FILT_BYPASS,
+    enableHPF:    RADIO_FILT_BYPASS,
+    enableLPF:    RADIO_FILT_BYPASS
+  };
+  vhf.setFilter(fcfg);
+  
+  delay(1000);
 
 }
 
@@ -61,9 +59,9 @@ void loop() {
   static uint8_t val=0;
 
   
-  while(Serial1.available()){
-        temp = Serial1.read();
-        Serial.print(temp);
+  while(SerialGPS->available()){
+        temp = SerialGPS->read();
+        SerialUSB->print(temp);
   }
   if(digitalRead(USER_PUSH_BTN1_PIN) == HIGH){
     digitalWrite(USER_LED_PIN, HIGH);
@@ -75,20 +73,4 @@ void loop() {
     digitalWrite(USER_LED_PIN, LOW);
   }
   
-  while(Serial2.available()){
-      temp = Serial2.read();
-      Serial.write(temp);
-  }
-  /*
-  for(int i=0;i<256;i++){
-    dacWrite(VHF_AOUT_PIN,i);
-    delayMicroseconds(10);
-  }
-  for(int i=254;i>0;i--){
-    dacWrite(VHF_AOUT_PIN,i);
-    delayMicroseconds(10);
-  }
-  */
-
-
 }
