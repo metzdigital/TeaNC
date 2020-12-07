@@ -1,63 +1,53 @@
-
 #include "teanc_core.h"
-#include "sa818v.h"
 
 
-HardwareSerial *SerialUSB;
-HardwareSerial *SerialGPS;
-HardwareSerial *SerialVHF;
+// TeaNC core configuration:
+TeancPeripheralsCfg peripheralsCfg = {
+  enableGPS: true,
+  enableVHF: true,
+  enableLCD: false,
+};
+TeaNC teanc(peripheralsCfg);
 
-void setup() {
-  //setup IO that doesn't have a lib yet
-  configIO();
-  
-  SerialUSB = &Serial;
-  SerialGPS = &Serial1;
-  SerialVHF = &Serial2;
-    
-  SerialUSB->begin(115200);
-  SerialGPS->begin(9600, SERIAL_8N1, GPS_UART_RX_PIN, GPS_UART_TX_PIN);
 
-  SerialUSB->println("ESP32 GPS testing");
+// Setup radio configuration:
+FiltCfg filtcfg = {
+  enableEmph:   RADIO_FILT_BYPASS,
+  enableHPF:    RADIO_FILT_BYPASS,
+  enableLPF:    RADIO_FILT_BYPASS
+};
+
+TransceiverCfg transceiverCfg = {
+  bandwidth:  RADIO_BANDWIDTH_12500_HZ,
+  txFreq:     144.600,
+  rxFreq:     144.600,
+  txSubtone:  RADIO_CTCS_DISABLE,
+  rxSubtone:  RADIO_CTCS_DISABLE,
+  squelch:    0,
+};
+
+
+
+void setup() {    
+  SerialUSB->begin(115200);      
+  SerialUSB->println("ESP32 GPS and VHF testing");
+
+  teanc.begin();
+
+  SerialUSB->println("Turning on VHF radio");
+  VHF.setup(transceiverCfg, filtcfg);
+  VHF.powerOn();
+
   digitalWrite(USER_LED_PIN, HIGH);
-  
-  Radio vhf(&Serial2);
-  vhf.setLogSerial(&Serial);
-  SerialUSB->println("SA818 Connect to VHF");
-  vhf.connect();
-  
-  Serial.println("SA818 Radio Version");
-  vhf.getVer();
-  
-  struct RadioCfg cfg = {
-    bandwidth:    RADIO_BANDWIDTH_12500_HZ,
-    txf:          145.000,
-    rxf:          145.000,
-    tx_subaudio:  RADIO_CTCS_DISABLE,
-    squelch:      0,
-    rx_subaudio:  RADIO_CTCS_DISABLE
-  };
-  
-  SerialUSB->println("SA818 Config VHF");
-  vhf.setConfig(cfg);
-
-  SerialUSB->println("SA818 Config Filters");
-  struct FiltCfg fcfg = {
-    enableEmph:   RADIO_FILT_BYPASS,
-    enableHPF:    RADIO_FILT_BYPASS,
-    enableLPF:    RADIO_FILT_BYPASS
-  };
-  vhf.setFilter(fcfg);
+    
+  SerialUSB->println("SA818 Radio Version");
+  VHF.getVer();  
   
   delay(1000);
-
 }
 
 void loop() {
   char temp;
-  uint8_t bytes; 
-  static uint8_t val=0;
-
   
   while(SerialGPS->available()){
         temp = SerialGPS->read();

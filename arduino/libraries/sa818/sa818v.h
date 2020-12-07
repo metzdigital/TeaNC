@@ -3,6 +3,7 @@
 
 #define RADIO_DEBUG
 
+#define RADIO_SERIAL_BAUD 9600
 #define RADIO_SERIAL_RX_BUF_LEN 60
 #define RADIO_SERIAL_TX_BUF_LEN 30
 #define RADIO_SERIAL_EOL '\r'
@@ -22,7 +23,8 @@
 #define RADIO_FREQ_MHZ_MIN 134.000
 #define RADIO_FREQ_MHZ_MAX 174.000
 
-#define RADIO_CTCS_DISABLE "0000"
+static char RADIO_CTCS_DISABLE[] = "0000";
+
 
 #define RADIO_TAIL_OPEN  1
 #define RADIO_TAIL_CLOSE 0
@@ -39,59 +41,116 @@
 #define RADIO_PWR_OFF_STATE LOW
 
 
-struct RadioCfg{
-  uint8_t bandwidth;
-  double txf;
-  double rxf;
-  char* tx_subaudio;
-  uint8_t squelch;
-  char* rx_subaudio;
-};
+typedef enum {
+  RADIO_TX_OFFSET_PLUS,
+  RADIO_TX_OFFSET_MINUS
+} RadioTxOffset;
 
-struct FiltCfg{
+
+typedef enum {
+  RADIO_MODE_RX,
+  RADIO_MODE_TX,
+} RadioMode;
+
+typedef struct RadioInterfaces {
+  uint8_t powerEnablePin;
+  uint8_t radioModePin;
+  Stream* RadioSerial;
+  Stream* LogSerial;
+} RadioInterfaces;
+
+typedef struct TransceiverCfg {
+  uint8_t bandwidth;
+  double txFreq;
+  double rxFreq;
+  char* txSubtone;
+  char* rxSubtone;
+  uint8_t squelch;
+} TransceiverCfg;
+
+typedef struct FiltCfg {
   bool enableEmph;
   bool enableHPF;
   bool enableLPF;
-};
+} FiltCfg;
 
 
 class Radio {
   public: 
     Radio();
+    Radio(RadioInterfaces interfaces);
     ~Radio();
     
-    void setControlSerial(HardwareSerial *streamObj) { ControlSerial = streamObj; controlSerialAttached=true; }
-    void setLogSerial(HardwareSerial *streamObj) { LogSerial = streamObj; logSerialAttached=true; }  
+    void setup(RadioInterfaces interfaces);
+    void setup(RadioInterfaces interfaces, TransceiverCfg transceiverCfg);
+    void setup(RadioInterfaces interfaces, TransceiverCfg transceiverCfg, FiltCfg filtcfg);
+    void setup(TransceiverCfg transceiverCfg);
+    void setup(TransceiverCfg transceiverCfg, FiltCfg filtcfg);
+
     
-    void init();
-	void transmitMode();
-	void receiveMode();
-	void powerOff();
-	void powerOn();
-    void setConfig(uint8_t bandwidth, double txf, double rxf, char* tx_subaudio, uint8_t squelch, char* rx_subaudio);
-    void setConfig(RadioCfg cfg);
+    void powerOn();    
+    void powerOff();
+
+    void setTransceiverCfg(TransceiverCfg transceiverCfg);
+    TransceiverCfg getTransceiverCfg();
+    
+//    void setLogSerial(Stream *streamObj) { LogSerial = streamObj; logSerialAttached=true; }  
+        
+    void transmitMode();
+    void receiveMode();    
+    RadioMode getTransceiverMode();
+        
+    void setFiltCfg(FiltCfg filtcfg);
+    FiltCfg getFiltCfg();
+ 
+    // Basic radio command wrappers:
     void scanFreq(double rxf);
     void setVolume(uint8_t vol);
-    void setFilter(bool enableEmph, bool enableHPF, bool enableLPF);
-    void setFilter(FiltCfg cfg);
     void setTail(bool openTail);
     uint8_t getSignalStrength();
     void getVer();
-
-    RadioCfg radioCfg;
-
-    FiltCfg filtCfg;
+    
+    // Additional helpers:
+    void setRxFreqWithTxOffset(double rxFreq, RadioTxOffset offsetSign); 
+    void setFreq(double freq);
+    void setTxAndRxFreq(double txFreq, double rxFreq);
+    void setSquelch(uint8_t squelch);
   
   private:  
-    HardwareSerial *ControlSerial;
-    HardwareSerial *LogSerial;
-    char serialTxBuf[RADIO_SERIAL_TX_BUF_LEN] = {0};
-    char serialRxBuf[RADIO_SERIAL_RX_BUF_LEN] = {0};
-    uint8_t serialTxLen = 0;
-    uint8_t serialRxLen = 0;
-    bool controlSerialAttached = false;
-    bool logSerialAttached = false;
-	bool isPowered = false;
+    RadioInterfaces interfaces;  
+    bool interfacesDefined = false;
+    bool interfacesStarted = false;
+    
+    TransceiverCfg transceiverCfg = {
+      bandwidth:  RADIO_BANDWIDTH_12500_HZ,
+      txFreq:     144.600,
+      rxFreq:     144.600,
+      txSubtone:  RADIO_CTCS_DISABLE,
+      rxSubtone:  RADIO_CTCS_DISABLE,
+      squelch:    0,
+    };
+        
+    FiltCfg filtCfg = {
+      enableEmph: true,
+      enableHPF:  true,
+      enableLPF:  true
+    };
+
+    bool logSerialAttached = false;    
+    
+    void sendTransceiverCfg();
+    void sendFiltCfg();
+    
+
+    char radioSerialTxBuf[RADIO_SERIAL_TX_BUF_LEN] = {0};
+    char radioSerialRxBuf[RADIO_SERIAL_RX_BUF_LEN] = {0};
+    uint8_t radioSerialTxLen = 0;
+    uint8_t radioSerialRxLen = 0;
+
+    bool isPowered = false;
+    
+    RadioMode transceiverMode;
+
     void sendCmd();
     void receiveReply();
 };

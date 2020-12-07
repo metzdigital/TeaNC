@@ -1,0 +1,197 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>TeaNC Radio</title>
+
+<!-- <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script> -->
+<!-- <script type="text/javascript" src="CanvasJs"></script> -->
+<!-- <script type="text/javascript" src="http://192.168.1.21/CanvasJs"></script> -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<!-- <script src="https://raw.githubusercontent.com/processing/p5.js-sound/master/lib/p5.sound.js"></script> -->
+
+<style>
+body {
+  color:#888;
+  font-family: "Lucida Console", Courier, monospace;
+}
+</style>
+
+</head>
+
+
+
+<body bgcolor="#000">
+<button onclick="toggleStartStop()">Start/Stop</button>
+<!-- <div id="chartContainer" style="height: 370px; width:100%;"></div> -->
+<div id="audio_graph_container" width="100%" height="300px"></div>
+<br/>
+Volume <input id="volume" onchange="setVolume()" type="range" min="0" max="1" step="0.1" value="0.0"/>
+
+
+<script src="visualizer-sample.js"></script>
+
+
+
+<script>
+// Some useful references:
+// https://plotly.com/javascript/streaming/
+// https://p5js.org/examples/
+// https://p5js.org/examples/sound-frequency-spectrum.html
+
+
+var baseUrl = prompt("Enter TeaNC IP address:", "192.168.?.?");
+if(!(/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(baseUrl)))  {
+  alert("You have entered an invalid IP address!")
+  return (false)
+}
+
+//var baseUrl = window.location.hostname;  // use this when hosted from the device
+
+var running = false;
+
+// Source settings:
+var sampleFreq = 32768; // fixme: request this value from the host
+var batchLen = 1024; // fixme: request this value from the host
+var bias = 2048;  // this will be measured later in real time.
+
+// Audio Setup:
+var volVal = 0;
+var muted = true;
+var audioStarted = false;
+var soundController = {};
+var audioBufferLen  = batchLen;
+
+var audioContext;
+var audioSource;
+var gainNode;
+
+
+
+// Graphing Setup:
+var audioGraphUpdateInterval = 200; // msec
+var audioGraphDataLength = batchLen*10; // number of dataPoints visible at any point
+audioGraphData = new Array(audioGraphDataLength).fill(bias);
+biasGraphData = new Array(audioGraphDataLength).fill(bias);
+
+audioTrace = {
+  name:'audio',
+  y: audioGraphData,
+  mode: 'lines',
+  line: {color: 'cyan'}
+}
+biasTrace = {
+  name:'bias',
+	y: biasGraphData,
+	mode:'lines',
+	line:{color:'#F00A', dash:'dot'}
+}
+
+layout = {
+	plot_bgcolor:"#222F",
+	paper_bgcolor:"#0000",
+	yaxis:{range: [0,4096], dtick:1024, showticklabels:false, ticks:'inside', gridcolor: '#040d',},
+	xaxis:{ticks:'', showticklabels:false, gridcolor: '#040d',},
+	showlegend:false,
+	margin: {t:20, l:20, r:20, b:20	}
+}
+
+var config = {responsive: true} // makes the plot resize automatically
+
+Plotly.plot('audio_graph_container', [audioTrace, biasTrace], layout, config);
+
+
+
+window.onload = function () {
+    
+	console.log("connecting to web socket");
+	webSocket1 = new WebSocket('ws://' + baseUrl + ':81/');
+	webSocket1.binaryType = 'arraybuffer';
+	webSocket1.onmessage=function(ws){
+		if(running){
+			if(event.data instanceof ArrayBuffer ){
+				data = new Uint16Array(event.data);
+			} else if(typeof event.data === "string"){
+				data = event.data.split(",").map(Number);
+			}
+			
+			numSamples = data.length;
+      audioGraphData = audioGraphData.concat(data);
+      var avg = 0;
+			for(var j=0; j<numSamples-1; j++){
+        avg += data[j];
+        audioGraphData[audioGraphDataLength+j] = data[j];
+			}
+      bias = avg/numSamples;
+      audioGraphData.splice(0, numSamples);
+      biasGraphData.splice(0, numSamples);
+      biasGraphData = biasGraphData.concat(new Array(numSamples).fill(bias));
+
+      if(!muted && audioStarted){
+        audioBuffer = audioContext.createBuffer(1, audioBufferLen, sampleFreq);
+        audioSource = audioContext.createBufferSource();
+        audioSource.buffer = audioBuffer;
+        var audioBufferArray = audioBuffer.getChannelData(0);
+        for(var j=0; j<numSamples-1; j++){
+          audioBufferArray[j] = (data[j]-bias) / 4096;
+        }
+        audioSource.connect(gainNode);
+        audioSource.start();
+      }
+		}
+	};
+
+	// Set plot updates:
+	setInterval(function(){
+      Plotly.update('audio_graph_container', {y:[audioGraphData]}, {}, 0);
+      Plotly.update('audio_graph_container', {y:[biasGraphData]}, {}, 1);
+	}, audioGraphUpdateInterval);	
+  
+  
+  var sample = new VisualizerSample();
+
+}
+	
+
+
+function setVolume(){
+  var prevMuted = muted;
+  volVal = document.getElementById("volume").value;
+  console.log(volVal);
+  if(audioStarted) gainNode.gain.setValueAtTime(volVal, audioContext.currentTime);
+  muted = (volVal==0);
+  console.log(muted);
+  console.log(prevMuted);
+  if(!muted && prevMuted){
+    console.log("unmuting");
+    if(!audioStarted){
+      console.log("opening audio context");
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      gainNode = audioContext.createGain();
+      gainNode.connect(audioContext.destination);
+      audioStarted = true;
+    }
+  }
+}
+
+
+
+function toggleStartStop(){
+	if(running){
+		console.log("Stopping");
+		fetch('http://' + baseUrl + '/Stop', {mode: "no-cors"});
+		running = false;
+    
+	} else {
+		console.log("Starting");
+		fetch('http://' + baseUrl + '/Start', {mode: "no-cors"});
+		running = true;
+	}
+}
+
+
+</script>
+
+
+</body>
+</html>

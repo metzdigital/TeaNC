@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link href="./css/jquery.rotaryswitch.css" rel="stylesheet" type="text/css">
+  <link href="./css/my_styles.css" rel="stylesheet" type="text/css">
+  <link href="./css/buttons.css" rel="stylesheet" type="text/css">  
+  <link href="./css/font-awesome.css" rel="stylesheet" type="text/css">
+  <link href="./css/sliders.css" rel="stylesheet" type="text/css">
+
+
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="./js/rockiot.ui.min.js"></script>
+  <script src="./js/rockiot.gauge.linear.js"></script>
+  <script src="./js/rockiot.gauge.radial.js"></script>
+
+</head>
+
+
+<body>
+  <div class="section">
+      <div class="container" id="buttons_container">
+        <div id="pwr_btn_container">
+          <a id="pwr_btn">&#xF011;</a>
+        </div>
+        <div id="sliders_container">
+          <div id="gain_slider_container">
+            <input id="gain_slider" type='range' min='1' value='1' max='8' step='1' />
+          </div>
+          <div id="vol_slider_container">
+            <input id="vol_slider" type="range" min="0" max="1" step="0.01" value="0.0" onchange="setVolume()"/>
+          </div>
+          <div id="lbl_gain">
+            <small_lbl>Gain</small_lbl>
+          </div>
+          <div id="lbl_vol">
+            <small_lbl>Vol</small_lbl>
+          </div>
+        </div>
+      </div>
+      
+      <div class="container" id="vol_gauge_container">
+        <rockiot-ui id="vol_gauge"></rockiot-ui> 
+      </div>
+      
+      <div class="container" id="chart_container">
+        <div id="chart_div"></div>
+      </div>
+  </div>
+
+  <div class="section">
+    <div class="container" id="tuner_container">
+      <div id="tuner_div">
+        <input id="rotary_switch_tuner" type="text" class="rotarySwitch" value="144.6">
+      </div>
+    </div>
+    
+    <div class="container" id="rssi_gauge_container">
+      <rockiot-ui id="rssi_gauge"></rockiot-ui> 
+    </div>
+    
+    <div class="container" id="freq_indicator_container">
+      <rockiot-ui id="freq_indicator"></rockiot-ui> 
+    </div>    
+  </div>
+  
+
+  <script src="https://code.jquery.com/jquery-1.12.0.min.js"></script>
+  <script src="./js/jquery.rotaryswitch.js"></script>
+  <script src="./js/my_gauges.js"></script>
+  <script src="./js/ui_setup.js"></script>
+
+  <div>
+  </div>
+
+</body>
+
+
+
+
+<script>
+// Some useful references:
+// https://plotly.com/javascript/streaming/
+// https://p5js.org/examples/
+// https://p5js.org/examples/sound-frequency-spectrum.html
+
+
+
+//var baseUrl = window.location.hostname;  // use this when hosted from the device
+baseUrl="";
+
+
+
+// Source settings:
+var currentFreq = 144.6; // fixme: request this value from the host
+var sampleFreq = 32768; // fixme: request this value from the host
+var batchLen = 1024;   // fixme: request this value from the host
+var bias = 2048;      // this will be measured later in real time.
+var running = false;
+
+// Audio Setup:
+var volVal = 0;
+var muted = true;
+var audioStarted = false;
+var soundController = {};
+var audioBufferLen  = batchLen;
+
+var audioContext;
+var audioSource;
+var gainNode;
+var audioScriptProcessor;
+var rssi;
+
+
+// Graphing Setup:
+var audioGraphUpdateInterval = 100; // msec
+var audioGraphDataLength = batchLen*1; // number of dataPoints visible at any point
+audioGraphData = new Array(audioGraphDataLength).fill(bias);
+biasGraphData = new Array(audioGraphDataLength).fill(bias);
+
+audioTrace = {
+  name:'audio',
+  y: audioGraphData,
+  mode: 'lines',
+  line: {color: 'cyan'}
+}
+biasTrace = {
+  name:'bias',
+	y: biasGraphData,
+	mode:'lines',
+	line:{color:'#F00A', dash:'dot'}
+}
+
+layout = {
+	plot_bgcolor:"#222F",
+	paper_bgcolor:"#0000",
+	yaxis:{range: [0,4096], dtick:1024, showticklabels:false, ticks:'inside', gridcolor: '#040d',},
+	xaxis:{ticks:'', dtick:audioGraphDataLength/10, showticklabels:false, gridcolor: '#040d',},
+	showlegend:false,
+	margin: {t:20, l:20, r:20, b:20	}
+}
+
+var config = {responsive: true} // makes the plot resize automatically
+
+Plotly.plot('chart_div', [audioTrace, biasTrace], layout, config);
+
+var rss;
+var cnt = 0;
+var freqIndicatorTextSpan;
+
+window.onload = function () {
+    
+  // SETUP INTERFACES:
+  tuner = $('.rotarySwitch').rotaryswitch({
+    minimum: 134, 
+    maximum: 174, 
+    step: 0.05, 
+    themeClass: 'big',
+    originDeg: 180, // defines the zero position relative to up
+    zoom: 0.4
+  });
+  tuner.on('change',function(){
+    setFreq(tuner.val(), "tunerControl");
+  })
+  
+  // Hide the gauge UI config tools
+  document.getElementsByClassName('rockiot-ui-control')[2].innerHTML = "";
+  
+  // Make the frequency indicator text editable, and intercept the return key
+  freqIndicatorTextSpan = document.getElementsByClassName("rockiot-gauge-linear-horizontal-value")[0].children[0];
+  freqIndicatorTextSpan.contentEditable = true;
+  freqIndicatorTextSpan.onkeydown = function(e) {
+    // trap the return key being pressed
+    if (e.keyCode === 13) {
+      e.preventDefault();
+      setFreq(freqIndicatorTextSpan.innerText);
+    }
+  }
+  // change frequency when you click out of the freq indicator text box
+  freqIndicatorTextSpan.addEventListener("focusout", function(){
+    setFreq(freqIndicatorTextSpan.innerText);
+  });
+  
+  
+  // SETUP RADIO INTERFACES:
+  while(!(/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(baseUrl))){
+    baseUrl = prompt("Enter TeaNC IP address:", "192.168.?.?");
+  }
+  
+	console.log("connecting to web socket");
+	webSocket1 = new WebSocket('ws://' + baseUrl + '/ws');
+	webSocket1.binaryType = 'arraybuffer';
+	webSocket1.onmessage=function(ws){
+    cnt++;
+//		if(running){
+			if(event.data instanceof ArrayBuffer ){
+				data = new Uint16Array(event.data);
+			} else if(typeof event.data === "string"){
+				data = event.data.split(",").map(Number);
+			}
+			
+			numSamples = data.length;
+      audioGraphData = audioGraphData.concat(data);
+      var avg = 0;
+			for(var j=0; j<numSamples-1; j++){
+        avg += data[j];
+        audioGraphData[audioGraphDataLength+j] = data[j];
+			}
+      bias = avg/numSamples;
+      audioGraphData.splice(0, numSamples);
+      biasGraphData.splice(0, numSamples);
+      biasGraphData = biasGraphData.concat(new Array(numSamples).fill(bias));
+
+      if(!muted && audioStarted){
+        audioBuffer = audioContext.createBuffer(1, audioBufferLen, sampleFreq);
+        audioSource = audioContext.createBufferSource();
+        audioSource.buffer = audioBuffer;
+        var audioBufferArray = audioBuffer.getChannelData(0);
+        var sumsq = 0;
+        for(var j=0; j<numSamples-1; j++){
+          sumsq += (data[j]-bias)*(data[j]-bias);
+          audioBufferArray[j] = (data[j]-bias) / 4096;
+        }
+        rss = Math.sqrt(sumsq)/numSamples;
+        //console.log(rss);
+
+        
+        audioSource.connect(gainNode);
+        audioSource.start();
+      }
+      
+    if(cnt==100) {console.log(data); console.log(bias); console.log(rss)}
+	};
+	
+	setInterval(function(){
+    if(running){
+      Plotly.update('chart_div', {y:[audioGraphData]}, {}, 0);
+      Plotly.update('chart_div', {y:[biasGraphData]}, {}, 1);
+      
+      if(rss){
+        document.getElementById("vol_gauge").value = rss*4;
+      }
+    }
+	}, audioGraphUpdateInterval);	
+  
+	setInterval(function(){
+    if(running){
+      $.get('http://' + baseUrl + '/getRssi', function(data, status){ 
+        rssi = `${data}`;      
+        if(rssi>0 && rssi<256)
+          document.getElementById("rssi_gauge").value = rssi;
+      });
+      //console.log(rss);
+    }
+	}, 500);	
+}
+	
+
+// POWER BUTTON handler
+$(document).ready(function(){
+  $('#pwr_btn').click(function(){
+    $(this).toggleClass('on');
+    console.log(this);
+    if(this.className == 'on'){
+      console.log("on");
+      console.log("Starting");
+      fetch('http://' + baseUrl + '/Start', {mode: "no-cors"});
+      running = true;
+    } else {
+      console.log("off");
+      console.log("Stopping");
+      fetch('http://' + baseUrl + '/Stop', {mode: "no-cors"});
+      running = false;
+    }
+  });
+});
+
+
+function setFreq(freq, fromControl=""){
+  document.getElementById("freq_indicator").value = freq;
+  // if controlling from the tuner knob then don't override tuner knob value
+  if(fromControl!="tuner") tuner.val(freq);  
+  console.log(freq);
+  document.getElementsByClassName("rotary_switch")[0].style.transform = "rotate(" + ((freq-134)/(174-134)*360+180) + "deg)";
+  if(running){
+    console.log("setting freq " + freq);
+    var url = 'http://' + baseUrl + '/set?freq=' + freq;
+    console.log("url: " + url);
+    fetch(url, {mode: "no-cors"});
+  }
+}
+ 
+
+function setVolume(){
+  var prevMuted = muted;
+  volVal = document.getElementById("vol_slider").value;
+  console.log(volVal);
+  if(audioStarted) gainNode.gain.setValueAtTime(volVal, audioContext.currentTime);
+  muted = (volVal==0);
+  console.log(muted);
+  console.log(prevMuted);
+  if(!muted && prevMuted){
+    console.log("unmuting");
+    // if this is the first time starting audio then setup the audio context
+    if(!audioStarted){
+      console.log("opening audio context");
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      audioScriptProcessor = audioContext.createScriptProcessor(audioBufferLen, 1, 1);
+      gainNode = audioContext.createGain();
+      gainNode.connect(audioContext.destination);
+      audioStarted = true;
+    }
+  }
+}
+
+</script>
+
+
+</html>

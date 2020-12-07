@@ -1,6 +1,13 @@
 #ifndef TEANC_CORE_H_
 #define TEANC_CORE_H_
 
+#include "Arduino.h"
+#include "sa818v.h"
+
+#include <driver/i2s.h>
+#include <driver/adc.h>
+
+
 
 //Return types
 typedef enum{
@@ -35,7 +42,53 @@ typedef enum{
 #define VHF_AOUT_PIN 25
 #define VHF_AIN_PIN 36
 
+//Serial object pointers
+extern HardwareSerial* SerialUSB;
+extern HardwareSerial* SerialGPS;
+extern HardwareSerial* SerialVHF;
 
-RetStatus_t configIO(void);
+//Make radio interfaces:
+extern RadioInterfaces radioInterfaces;
+extern Radio VHF;
+
+
+typedef struct {
+  bool enableGPS;
+  bool enableVHF;
+  bool enableLCD;  
+} TeancPeripheralsCfg;
+
+typedef struct {
+  bool enableWifi;
+  const char* wifiSSID;
+  const char* wifiPassword;
+} WifiCfg;
+
+class TeaNC {
+  public: 
+    TeaNC();
+    TeaNC(TeancPeripheralsCfg peripheralsCfg);
+    TeaNC(WifiCfg wifiCfg);
+    TeaNC(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiCfg);
+    ~TeaNC();
+    
+    void begin();
+    void begin(TeancPeripheralsCfg peripheralsCfg);
+    void begin(WifiCfg wifiCfg);
+    void begin(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiCfg);
+    
+  private:
+    TeancPeripheralsCfg peripheralsCfg = {
+      enableGPS: true,
+      enableVHF: true,
+      enableLCD: false,
+    };
+    
+    WifiCfg wifiCfg = {
+      enableWifi:   false,
+      wifiSSID:     "",
+      wifiPassword: "",
+    };
+};
 
 #endif 

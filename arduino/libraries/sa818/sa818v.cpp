@@ -1,100 +1,181 @@
-#include "Arduino.h"
-#include "teanc_core.h"
+#include <Arduino.h>
 #include "sa818v.h"
 #include <assert.h>
 
+/**********************
+The Radio object defined here requires interfaces be defined prior to starting.
+Interfaces may be defined either when the object is created or during setup.
+************************/
 
+
+// CONSTRUCTORS:
 Radio::Radio() {}
 Radio::~Radio() {}
 
+Radio::Radio(RadioInterfaces interfaces) {
+  this->interfaces = interfaces;
+}
 
-// Establish serial connection to SA818 Radio command interface
-// This requires a serial stream object be attached to the Radio object in your main sketch.
-// Ex:  radio.setControlSerial(&Serial1);
-void Radio::init()
-{
-	//Setup the VHF pin modes
-	pinMode(VHF_UART_TX_PIN, OUTPUT);
-	pinMode(VHF_UART_RX_PIN, INPUT);
-	pinMode(VHF_RX_TXN_PIN, OUTPUT);
-	pinMode(VHF_PWR_DOWN_PIN, OUTPUT);
+void Radio::setup(RadioInterfaces interfaces) {
+  this->interfaces = interfaces;
+  this->interfacesStarted = true;
+}
+
+void Radio::setup(TransceiverCfg transceiverCfg) {
+  this->transceiverCfg = transceiverCfg;
+  this->interfacesStarted = true;
+}
+
+void Radio::setup(RadioInterfaces interfaces, TransceiverCfg transceiverCfg) {
+  this->interfaces = interfaces;
+  this->transceiverCfg = transceiverCfg;
+  this->interfacesStarted = true;
+}
+
+void Radio::setup(RadioInterfaces interfaces, TransceiverCfg transceiverCfg, FiltCfg filtcfg) {
+  this->interfaces = interfaces;
+  this->transceiverCfg = transceiverCfg;
+  this->filtCfg = filtcfg;
+  this->interfacesStarted = true;
+}
+
+void Radio::setup(TransceiverCfg transceiverCfg, FiltCfg filtcfg) {
+  this->transceiverCfg = transceiverCfg;
+  this->filtCfg = filtcfg;
+  this->interfacesStarted = true;
+}
+
+
+// Power on and initialize the radio:
+void Radio::powerOn(){
   
-	//Enforce the radio is powered on
-	this->powerOn();
-	
-	//Enforce the radio is in receive state
-	this->receiveMode();	
-	
-	//Incase the radio was in power down state give some time to boot
-	delay(100);
-
-	//Configure the Serial Port
-	this->ControlSerial = &Serial2; 
-	this->controlSerialAttached=true;
-	ControlSerial->begin(9600, SERIAL_8N1, VHF_UART_RX_PIN, VHF_UART_TX_PIN);
-
-  serialTxLen = sprintf(serialTxBuf, "%s\r\n", RADIO_CMD_CONNECT);
-  sendCmd();
+  // Require interfaces started by Radio::setup()
+  assert(this->interfacesStarted);
+  
+	// Set tx/rx control pin to put the radio in rx mode when it starts:
+	this->receiveMode();
+  
+	// Turn on the radio:
+	digitalWrite(this->interfaces.powerEnablePin, RADIO_PWR_ON_STATE);
+	delay(100);  //Incase the radio was in power down state give some time to boot
+	this->isPowered = true;
+  
+  // Initiate serial connection:
+  this->radioSerialTxLen = sprintf(this->radioSerialTxBuf, "%s\r\n", RADIO_CMD_CONNECT);
+  this->sendCmd();
   //fixme: verify expected response
+  
+  // Send transceiver config:
+  this->sendTransceiverCfg();
+  
+  // Send radio filters config:
+  this->sendFiltCfg();
+    
+
 }
-
-void Radio::setConfig(RadioCfg cfg)
-{
-  assert(controlSerialAttached);
-  assert(this->isPowered);
-  serialTxLen = sprintf(serialTxBuf, "%s=%0i,%3.4f,%3.4f,%4s,%i,%4s\r\n", RADIO_CMD_SET_GROUP, cfg.bandwidth, cfg.txf, cfg.rxf, cfg.tx_subaudio, cfg.squelch, cfg.rx_subaudio);
-  radioCfg = cfg;
-  sendCmd();
-}
-
-
-// Sets key radio control parameters
-void Radio::setConfig(uint8_t bandwidth, double txf, double rxf, char* tx_subaudio, uint8_t squelch, char* rx_subaudio)
-{
-  assert(controlSerialAttached);
-  assert(this->isPowered);
-  serialTxLen = sprintf(serialTxBuf, "%s=%0i,%3.4f,%3.4f,%4s,%i,%4s\r\n", RADIO_CMD_SET_GROUP, bandwidth, txf, rxf, tx_subaudio, squelch, rx_subaudio);
-  sendCmd();
-  //fixme: verify expected response
-
-  // make note of this config:
-  radioCfg.bandwidth = bandwidth;
-  radioCfg.txf = txf;
-  radioCfg.rxf = rxf;
-  radioCfg.tx_subaudio = tx_subaudio;
-  radioCfg.rx_subaudio = rx_subaudio;
-  radioCfg.squelch = squelch;
-}
-
-//Set the radio to receive signals
-void Radio::transmitMode(){
-	digitalWrite(VHF_RX_TXN_PIN, RADIO_TX_STATE);
-}
-
-//Set the radio to receive signals
-void Radio::receiveMode(){
-	digitalWrite(VHF_RX_TXN_PIN, RADIO_RX_STATE);
-}
-
+  
+  
 //put the radio in a lower power state
 void Radio::powerOff(){
-	digitalWrite(VHF_PWR_DOWN_PIN, RADIO_PWR_OFF_STATE);
+	digitalWrite(this->interfaces.powerEnablePin, RADIO_PWR_OFF_STATE);
 	this->isPowered = false;
 }
-
-//power on the radio
-void Radio::powerOn(){
-	digitalWrite(VHF_PWR_DOWN_PIN, RADIO_PWR_ON_STATE);
-	this->isPowered = true;
+  
+  
+// Set the transceiver config in local memory, and
+// command the radio to this config if the radio is on:
+void Radio::setTransceiverCfg(TransceiverCfg transceiverCfg)
+{
+  this->transceiverCfg = transceiverCfg;
+  if(this->isPowered) {
+    this->sendTransceiverCfg();
+  }
 }
+
+// If the radio is on, command the radio to use the locally-stored config:
+void Radio::sendTransceiverCfg()
+{
+  assert(this->isPowered);
+  this->radioSerialTxLen = sprintf(this->radioSerialTxBuf, "%s=%0i,%3.4f,%3.4f,%4s,%i,%4s\r\n", 
+    RADIO_CMD_SET_GROUP, 
+    this->transceiverCfg.bandwidth, 
+    this->transceiverCfg.txFreq, 
+    this->transceiverCfg.rxFreq, 
+    this->transceiverCfg.txSubtone, 
+    this->transceiverCfg.squelch, 
+    this->transceiverCfg.rxSubtone
+  );
+  this->sendCmd();
+}
+
+
+// Gets locally-stored transceiver config:
+TransceiverCfg Radio::getTransceiverCfg() 
+{
+  return this->transceiverCfg;
+}
+
+
+// Enables or bypasses pre/de-emphasis filter, high-pass filter, and low-pass filter
+// If radio is on, this commands the radio to use this config, 
+// otherwise just stores the config for use during Radio::start().
+void Radio::setFiltCfg(FiltCfg filtcfg)
+{
+  this->filtCfg = filtcfg;   
+  if(this->isPowered){
+    this->sendFiltCfg();
+  }
+}
+
+
+// Gets locally-stored radio filters config:
+FiltCfg Radio::getFiltCfg()
+{
+  return this->filtCfg;
+}
+
+
+// Enables or bypasses pre/de-emphasis filter, high-pass filter, and low-pass filter
+void Radio::sendFiltCfg()
+{
+  assert(this->isPowered);
+  this->radioSerialTxLen = sprintf(this->radioSerialTxBuf, "%s=%0i,%0i,%0i\r\n", RADIO_CMD_SET_FILT, 
+    (this->filtCfg.enableEmph ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS),
+    (this->filtCfg.enableHPF  ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS),
+    (this->filtCfg.enableLPF  ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS)
+  );
+  this->sendCmd();
+  //fixme: verify expected response and only save this cfg if acknowledged
+}
+
+
+// Set the radio to transmit mode:
+void Radio::transmitMode()
+{
+  digitalWrite(this->interfaces.radioModePin, RADIO_TX_STATE);
+  this->transceiverMode = RADIO_MODE_TX;
+}
+
+// Set the radio to receive mode
+void Radio::receiveMode()
+{
+  digitalWrite(this->interfaces.radioModePin, RADIO_RX_STATE);
+  this->transceiverMode = RADIO_MODE_RX;
+}
+
+
+RadioMode Radio::getTransceiverMode()
+{
+  return this->transceiverMode;
+}
+
 
 // Checks for signal received on specified frequency
 void Radio::scanFreq(double rxf)
 {
-  assert(controlSerialAttached);
   assert(this->isPowered);
-  serialTxLen = sprintf(serialTxBuf, "%s+%3.4f\r\n", RADIO_CMD_SCAN_FREQ, rxf);
-  sendCmd();
+  this->radioSerialTxLen = sprintf(radioSerialTxBuf, "%s+%3.4f\r\n", RADIO_CMD_SCAN_FREQ, rxf);
+  this->sendCmd();
   //fixme: parse response
 }
 
@@ -102,60 +183,19 @@ void Radio::scanFreq(double rxf)
 // Sets volume of received audio
 void Radio::setVolume(uint8_t vol)
 {
-  assert(controlSerialAttached);
-  assert(this->isPowered);
-  serialTxLen = sprintf(serialTxBuf, "%s=%0i\r\n", RADIO_CMD_SET_VOL, vol);
-  sendCmd();
+  assert(this->isPowered);    
+  this->radioSerialTxLen = sprintf(radioSerialTxBuf, "%s=%0i\r\n", RADIO_CMD_SET_VOL, vol);
+  this->sendCmd();
   //fixme: verify expected response
 }
-
-
-
-// Enables or bypasses pre/de-emphasis filter, high-pass filter, and low-pass filter
-void Radio::setFilter(FiltCfg cfg){
-  assert(controlSerialAttached);
-  assert(this->isPowered);
-  
-  serialTxLen = sprintf(serialTxBuf, "%s=%0i,%0i,%0i\r\n", RADIO_CMD_SET_FILT, 
-    (cfg.enableEmph ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS),
-    (cfg.enableHPF  ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS),
-    (cfg.enableLPF  ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS)
-  );
-  sendCmd();
-  //fixme: verify expected response
-  filtCfg = cfg;
-}
-
-
-// Enables or bypasses pre/de-emphasis filter, high-pass filter, and low-pass filter
-void Radio::setFilter(bool enableEmph, bool enableHPF, bool enableLPF)
-{
-  assert(controlSerialAttached);
-  assert(this->isPowered);
-  
-  serialTxLen = sprintf(serialTxBuf, "%s=%0i,%0i,%0i\r\n", RADIO_CMD_SET_FILT, 
-    (enableEmph ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS),
-    (enableHPF  ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS),
-    (enableLPF  ? RADIO_FILT_ENABLE : RADIO_FILT_BYPASS)
-  );
-  sendCmd();
-  //fixme: verify expected response
-
-  filtCfg.enableEmph = enableEmph;
-  filtCfg.enableLPF = enableLPF;
-  filtCfg.enableHPF = enableHPF;
-}
-
-
 
 
 // Opens or closes radio tail tone
 void Radio::setTail(bool openTail)
 {
-  assert(controlSerialAttached);
   assert(this->isPowered);
-  serialTxLen = sprintf(serialTxBuf, "%s=%0i\r\n", RADIO_CMD_SET_TAIL, openTail);
-  sendCmd();
+  this->radioSerialTxLen = sprintf(radioSerialTxBuf, "%s=%0i\r\n", RADIO_CMD_SET_TAIL, openTail);
+  this->sendCmd();
   //fixme: verify expected response
 }
 
@@ -163,15 +203,13 @@ void Radio::setTail(bool openTail)
 // Evaluates radio signal stength indication  
 uint8_t Radio::getSignalStrength()
 {
-  assert(controlSerialAttached);
   assert(this->isPowered);
-  
   unsigned int rssi = 0;
-  serialTxLen = sprintf(serialTxBuf, "%s?\r\n", RADIO_CMD_GET_RSSI);
-  sendCmd();
+  this->radioSerialTxLen = sprintf(radioSerialTxBuf, "%s?\r\n", RADIO_CMD_GET_RSSI);
+  this->sendCmd();
   //fixme: parse response
-  if(serialRxLen>0){
-    sscanf(serialRxBuf, "RSSI=%03u", &rssi);
+  if(radioSerialRxLen>0){
+    sscanf(this->radioSerialRxBuf, "RSSI=%03u", &rssi);
   }
   return (uint8_t)rssi;
 }
@@ -180,34 +218,66 @@ uint8_t Radio::getSignalStrength()
 // Queries radio module firmware version
 void Radio::getVer()
 {
-  assert(controlSerialAttached);
   assert(this->isPowered);
-  
-  serialTxLen = sprintf(serialTxBuf, "%s?\r\n", RADIO_CMD_GET_VER);
-  sendCmd();
+  this->radioSerialTxLen = sprintf(radioSerialTxBuf, "%s?\r\n", RADIO_CMD_GET_VER);
+  this->sendCmd();
   //fixme: parse response
 }
 
 
+// Sets Rx frequency as specified, and Tx frequency with + or - 600 Hz offset 
+void Radio::setRxFreqWithTxOffset(double rxFreq, RadioTxOffset offsetSign)
+{
+  double txOffset = (double)(offsetSign==RADIO_TX_OFFSET_PLUS ? +600 : -600);
+  this->transceiverCfg.rxFreq = rxFreq;
+  this->transceiverCfg.txFreq = rxFreq + txOffset;
+  this->sendTransceiverCfg();
+}
+
+
+// Sets both Rx and Tx frequency to specified value:
+void Radio::setFreq(double freq)
+{
+  this->transceiverCfg.rxFreq = freq;
+  this->transceiverCfg.txFreq = freq;
+  this->sendTransceiverCfg();
+}
+
+
+// Sets Tx and Rx frequencies separately:
+void Radio::setTxAndRxFreq(double txFreq, double rxFreq)
+{
+  this->transceiverCfg.rxFreq = rxFreq;
+  this->transceiverCfg.txFreq = txFreq;
+  this->sendTransceiverCfg();
+}
+
+
+// Set squelch:
+void Radio::setSquelch(uint8_t squelch)
+{
+  this->transceiverCfg.squelch = squelch;
+  this->sendTransceiverCfg();
+}
+
+
+// Sends serial buffer radioSerialTxBuf to the radio
 void Radio::sendCmd()
 {
-  assert(controlSerialAttached);
   assert(this->isPowered);
   #ifdef RADIO_DEBUG
-    assert(logSerialAttached);
-    LogSerial->print("To radio: ");
-    LogSerial->print(serialTxBuf);
+    this->interfaces.LogSerial->print("To radio: ");
+    this->interfaces.LogSerial->print(radioSerialTxBuf);
   #endif
-  ControlSerial->flush();
+  this->interfaces.RadioSerial->flush();
   // Send cmd to radio:
-  ControlSerial->print(serialTxBuf);
+  this->interfaces.RadioSerial->print(this->radioSerialTxBuf);
   delay(1);
   // Receive response from radio cmd interface:
-  receiveReply();
+  this->receiveReply();
   #ifdef RADIO_DEBUG
-    assert(logSerialAttached);
-    LogSerial->print("From radio: ");
-    LogSerial->println(serialRxBuf);
+    this->interfaces.LogSerial->print("From radio: ");
+    this->interfaces.LogSerial->println(this->radioSerialRxBuf);
   #endif
 }
 
@@ -216,38 +286,37 @@ void Radio::sendCmd()
 // Waits for acknowledgement from SA818 command interface
 void Radio::receiveReply()
 {
-  assert(controlSerialAttached);
   assert(this->isPowered);
   
   unsigned char readByte;
   
   // wait here until receive byte
   // fixme:  add timeout here
-  while(!ControlSerial->available()){
+  while(!this->interfaces.RadioSerial->available()){
     delay(1);
   }
 
-  serialRxLen = 0;
+  this->radioSerialRxLen = 0;
     
   // Collect bytes until EOL or reach max buffer length:
-  while(ControlSerial->available()){
+  while(this->interfaces.RadioSerial->available()){
 
     // read one byte:
-    readByte = ControlSerial->read();
+    readByte = this->interfaces.RadioSerial->read();
     
     // check if it's end of line:
     if(readByte=='\r' || readByte=='\n'){
-      serialRxBuf[serialRxLen]='\0';
+      this->radioSerialRxBuf[this->radioSerialRxLen]='\0';
       return;
  
     // if receiving then receive:
-    } else if(serialRxLen<RADIO_SERIAL_RX_BUF_LEN) {
-      serialRxBuf[serialRxLen++] = readByte;
+    } else if(this->radioSerialRxLen<RADIO_SERIAL_RX_BUF_LEN) {
+      this->radioSerialRxBuf[this->radioSerialRxLen++] = readByte;
 
     // if reached max allowable msg length then dump and reset buffer:
-    } else if(serialRxLen>=RADIO_SERIAL_RX_BUF_LEN) {
-      LogSerial->println("Error:  radio cmd reply exceeds buffer length.");
-      serialRxLen = 0;
+    } else if(radioSerialRxLen>=RADIO_SERIAL_RX_BUF_LEN) {
+      this->interfaces.LogSerial->println("Error:  radio cmd reply exceeds buffer length.");
+      this->radioSerialRxLen = 0;
       return;
     }
   }
