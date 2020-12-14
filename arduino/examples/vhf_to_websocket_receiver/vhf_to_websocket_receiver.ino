@@ -2,10 +2,11 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 
-// Wifi config:
-#include "my_wifi.h"  // this #defines my ssid and pw; remove this line or make your own
-
-
+//Either remove this line and use the subsequent #defines instead,
+//or write your own wifi_private.h file containing these #defines.
+//#include "wifi_private.h"
+const char wifi_ssid[] = "my_wifi_ssid";
+const char wifi_password[] = "my_wifi_password";
 
 // TeaNC core configuration:
 TeancPeripheralsCfg peripheralsCfg = {
@@ -15,11 +16,18 @@ TeancPeripheralsCfg peripheralsCfg = {
 };
 
 WifiCfg wifiCfg = {
-  enableWifi:    true,
-  wifiSSID:      MY_WIFI_SSID,
-  wifiPassword:  MY_WIFI_PASSWORD,
+  mode:      WIFI_MODE_STA,  // WIFI_MODE_STA or WIFI_MODE_AP
+  ssid:      wifi_ssid,
+  password:  wifi_password,
 };
-TeaNC teanc(peripheralsCfg, wifiCfg);
+
+WifiCfg fallbackWifiCfg = {
+  mode:      WIFI_MODE_AP,  // WIFI_MODE_STA or WIFI_MODE_AP
+  ssid:      (const char*)"teanc",
+  password:  (const char*)"",
+};
+
+TeaNC teanc(peripheralsCfg, wifiCfg, fallbackWifiCfg);
 
 // Radio configuration:
 TransceiverCfg transceiverCfg = {
@@ -32,9 +40,9 @@ TransceiverCfg transceiverCfg = {
 };
 
 FiltCfg filtcfg = {
-  enableEmph:   RADIO_FILT_BYPASS,
-  enableHPF:    RADIO_FILT_BYPASS,
-  enableLPF:    RADIO_FILT_BYPASS
+  enableEmph:   RADIO_FILT_ENABLE,
+  enableHPF:    RADIO_FILT_ENABLE,
+  enableLPF:    RADIO_FILT_ENABLE
 };
 
 
@@ -192,7 +200,6 @@ void setup() {
 
   //VHF RADIO SETUP:
   SerialUSB->println("Turning on VHF radio");
-  VHF.setup(transceiverCfg, filtcfg);
   VHF.powerOn();
   
   VHF.getVer();

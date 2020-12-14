@@ -14,43 +14,44 @@ Radio::~Radio() {}
 
 Radio::Radio(RadioInterfaces interfaces) {
   this->interfaces = interfaces;
+  this->interfacesDefined = true;
 }
 
 void Radio::setup(RadioInterfaces interfaces) {
   this->interfaces = interfaces;
-  this->interfacesStarted = true;
+  this->interfacesDefined = true;
 }
 
 void Radio::setup(TransceiverCfg transceiverCfg) {
   this->transceiverCfg = transceiverCfg;
-  this->interfacesStarted = true;
+  this->interfacesDefined = true;
 }
 
 void Radio::setup(RadioInterfaces interfaces, TransceiverCfg transceiverCfg) {
   this->interfaces = interfaces;
   this->transceiverCfg = transceiverCfg;
-  this->interfacesStarted = true;
+  this->interfacesDefined = true;
 }
 
 void Radio::setup(RadioInterfaces interfaces, TransceiverCfg transceiverCfg, FiltCfg filtcfg) {
   this->interfaces = interfaces;
   this->transceiverCfg = transceiverCfg;
   this->filtCfg = filtcfg;
-  this->interfacesStarted = true;
+  this->interfacesDefined = true;
 }
 
 void Radio::setup(TransceiverCfg transceiverCfg, FiltCfg filtcfg) {
   this->transceiverCfg = transceiverCfg;
   this->filtCfg = filtcfg;
-  this->interfacesStarted = true;
+  this->interfacesDefined = true;
 }
 
 
 // Power on and initialize the radio:
 void Radio::powerOn(){
   
-  // Require interfaces started by Radio::setup()
-  assert(this->interfacesStarted);
+  // Require interfaces started by Radio::setup() or in the constructor
+  assert(this->interfacesDefined);
   
 	// Set tx/rx control pin to put the radio in rx mode when it starts:
 	this->receiveMode();

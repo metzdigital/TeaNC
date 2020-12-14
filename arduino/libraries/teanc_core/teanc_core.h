@@ -4,6 +4,10 @@
 #include "Arduino.h"
 #include "sa818v.h"
 
+#include <IPv6Address.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+
 #include <driver/i2s.h>
 #include <driver/adc.h>
 
@@ -51,6 +55,11 @@ extern HardwareSerial* SerialVHF;
 extern RadioInterfaces radioInterfaces;
 extern Radio VHF;
 
+typedef struct {
+  uint16_t sample_rate; // samples per sec
+  uint16_t buffer_len;  // samples
+} AudioFromRadioCfg;
+
 
 typedef struct {
   bool enableGPS;
@@ -58,24 +67,39 @@ typedef struct {
   bool enableLCD;  
 } TeancPeripheralsCfg;
 
+
+
 typedef struct {
-  bool enableWifi;
-  const char* wifiSSID;
-  const char* wifiPassword;
+  wifi_mode_t mode;
+  const char* ssid;
+  const char* password;
 } WifiCfg;
+  
+typedef enum {
+  WIFI_CFG_NONE,
+  WIFI_CFG_PREFERRED,
+  WIFI_CFG_FALLBACK
+} WifiSelectCfg;
+
+
 
 class TeaNC {
   public: 
     TeaNC();
     TeaNC(TeancPeripheralsCfg peripheralsCfg);
     TeaNC(WifiCfg wifiCfg);
+    TeaNC(WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg);
     TeaNC(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiCfg);
+    TeaNC(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg);
     ~TeaNC();
     
     void begin();
     void begin(TeancPeripheralsCfg peripheralsCfg);
     void begin(WifiCfg wifiCfg);
+    void begin(WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg);
     void begin(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiCfg);
+    void begin(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg);
+    
     
   private:
     TeancPeripheralsCfg peripheralsCfg = {
@@ -84,11 +108,28 @@ class TeaNC {
       enableLCD: false,
     };
     
-    WifiCfg wifiCfg = {
-      enableWifi:   false,
-      wifiSSID:     "",
-      wifiPassword: "",
+    AudioFromRadioCfg audioFromRadioCfg = {
+      sample_rate: 32768,
+      buffer_len:  1024,
     };
+
+    struct {
+      bool enable = false;
+      WifiCfg preferredCfg;
+      WifiCfg fallbackCfg;
+      bool fallbackDefined = false;    
+      WifiSelectCfg activeCfg = WIFI_CFG_NONE;
+      wifi_mode_t mode;
+    } wifi;
+    
+    void startWifi();
+    bool tryWifiCfg(WifiCfg cfg);
+
+    
+    TaskHandle_t audioSamplingTask;
+    uint16_t* audio_in_buffer;  // need to calloc space for this in start method
+
+    
 };
 
 #endif 

@@ -119,7 +119,6 @@ class Radio {
   private:  
     RadioInterfaces interfaces;  
     bool interfacesDefined = false;
-    bool interfacesStarted = false;
     
     TransceiverCfg transceiverCfg = {
       bandwidth:  RADIO_BANDWIDTH_12500_HZ,

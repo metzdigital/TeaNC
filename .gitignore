@@ -1,5 +1,5 @@
 # Sensitive
-my_wifi.h
+*private.h
 
 # Prerequisites
 *.d

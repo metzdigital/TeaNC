@@ -1,7 +1,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
 #include "teanc_core.h"
 #include "sa818v.h"
+
+
+# define TEANC_WIFI_JOIN_TIMEOUT 10   //sec
 
 
 //Make serial interface pointers:
@@ -21,7 +26,7 @@ extern Radio VHF(radioInterfaces);
   
   
   
-
+// Constructors:
 TeaNC::TeaNC() {}
 TeaNC::~TeaNC() {}
 
@@ -29,15 +34,35 @@ TeaNC::TeaNC(TeancPeripheralsCfg peripheralsCfg) {
   this->peripheralsCfg = peripheralsCfg; 
 }
 
+TeaNC::TeaNC(WifiCfg wifiCfg) {
+  this->wifi.preferredCfg = wifiCfg;
+  this->wifi.enable = true;
+}
+
 TeaNC::TeaNC(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiCfg) {
   this->peripheralsCfg = peripheralsCfg; 
-  this->wifiCfg = wifiCfg;
+  this->wifi.preferredCfg = wifiCfg;
+  this->wifi.enable = true;
 }
 
-TeaNC::TeaNC(WifiCfg wifiCfg) {
-  this->wifiCfg = wifiCfg;
+TeaNC::TeaNC(WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg) {
+  this->wifi.preferredCfg = wifiPreferredCfg;
+  this->wifi.fallbackCfg = wifiFallbackCfg;
+  this->wifi.fallbackDefined = true;
+  this->wifi.enable = true;
 }
 
+TeaNC::TeaNC(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg) {
+  this->peripheralsCfg = peripheralsCfg; 
+  this->wifi.preferredCfg = wifiPreferredCfg;
+  this->wifi.fallbackCfg = wifiFallbackCfg;
+  this->wifi.fallbackDefined = true;
+  this->wifi.enable = true;
+}
+
+
+
+// Start methods:
 
 void TeaNC::begin(TeancPeripheralsCfg peripheralsCfg) {
   this->peripheralsCfg = peripheralsCfg;
@@ -45,30 +70,41 @@ void TeaNC::begin(TeancPeripheralsCfg peripheralsCfg) {
 }
 
 void TeaNC::begin(WifiCfg wifiCfg) {
-  this->wifiCfg = wifiCfg;
+  this->wifi.preferredCfg = wifiCfg;
+  this->wifi.enable = true;
+  this->begin();
+}
+
+void TeaNC::begin(WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg) {
+  this->wifi.preferredCfg = wifiPreferredCfg;
+  this->wifi.fallbackCfg = wifiFallbackCfg;
+  this->wifi.fallbackDefined = true;
+  this->wifi.enable = true;
   this->begin();
 }
 
 void TeaNC::begin(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiCfg) {
   this->peripheralsCfg = peripheralsCfg;
-  this->wifiCfg = wifiCfg;
+  this->wifi.preferredCfg = wifiCfg;
+  this->wifi.enable = true;
   this->begin();
 }
+
+void TeaNC::begin(TeancPeripheralsCfg peripheralsCfg, WifiCfg wifiPreferredCfg, WifiCfg wifiFallbackCfg) {
+  this->peripheralsCfg = peripheralsCfg;
+  this->wifi.preferredCfg = wifiPreferredCfg;
+  this->wifi.fallbackCfg = wifiFallbackCfg;
+  this->wifi.fallbackDefined = true;
+  this->wifi.enable = true;
+  this->begin();
+}
+
 
 void TeaNC::begin() {
   
   // Initialize Wifi (if enabled):
-  if(this->wifiCfg.enableWifi){
-    WiFi.begin(this->wifiCfg.wifiSSID, this->wifiCfg.wifiPassword);
-    SerialUSB->println("");
-    SerialUSB->print("Connecting to Wifi..");
-    // Wait for connection
-    while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      SerialUSB->print(".");
-    }
-    SerialUSB->print("Wifi connected. IP: ");
-    SerialUSB->println(WiFi.localIP());        
+  if(this->wifi.enable){
+    this->startWifi();
   }  
   
   // Initialize GPS (if enabled):
@@ -98,4 +134,53 @@ void TeaNC::begin() {
 	//Display pin modes
 	pinMode(DISPLAY_ENABLE_PIN, OUTPUT);
 	 
+}
+
+
+bool TeaNC::tryWifiCfg(WifiCfg cfg) {  
+  unsigned long tstart;
+  bool connected = false;
+  if(cfg.mode == WIFI_MODE_STA) {
+    SerialUSB->println("");
+    SerialUSB->printf("Connecting to SSID \"%s\"\n", cfg.ssid);
+    WiFi.begin(cfg.ssid, cfg.password);
+    tstart = millis();
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(100);
+      if((millis()-tstart)/1000 > TEANC_WIFI_JOIN_TIMEOUT){
+        SerialUSB->printf("Timed out trying to join \"%s\"\n", cfg.ssid); 
+        break;
+      }
+    }
+    
+    if(WiFi.status() == WL_CONNECTED) {
+      SerialUSB->print("Wifi connected. IP: ");
+      SerialUSB->println(WiFi.localIP());
+      connected = true;
+    }
+    
+  } else if(cfg.mode == WIFI_MODE_AP) {
+    if(strlen(cfg.password)>0){
+      SerialUSB->printf("Starting AP with SSID \"%s\" with password.\n", cfg.ssid);
+      WiFi.softAP(cfg.ssid, cfg.password);
+    } else {
+      SerialUSB->printf("Starting AP with SSID \"%s\" without password.\n", cfg.ssid);
+      WiFi.softAP(cfg.ssid);
+    }
+    IPAddress myIP = WiFi.softAPIP();
+    SerialUSB->print("AP IP address: ");
+    SerialUSB->println(myIP);
+    connected = true;
+  }
+  
+  return connected;
+}
+
+
+void TeaNC::startWifi() {
+  bool connected = this->tryWifiCfg(this->wifi.preferredCfg);
+  if(!connected && this->wifi.fallbackDefined){
+    SerialUSB->println("Trying fallback wifi cfg..");
+    connected = this->tryWifiCfg(this->wifi.fallbackCfg);    
+  }
 }
