@@ -13,7 +13,14 @@ Use interrupts and event handlers to minimize work in main loop.
 
 
 
-Imagining one firmware for all users and all operating modes...
+GENERAL IDEAS:
+...
+
+
+
+
+
+UNIFIED FIRMWARE CONCEPT:
 
 Should the teanc *always* enable Wifi for reconfiguration?
 Some operating modes may not need or want Wifi.
