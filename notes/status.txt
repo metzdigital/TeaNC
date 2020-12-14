@@ -15,10 +15,11 @@ Ryan's near-term goals:
 
 TEANC CORE OBJECT:
 
-  Wifi handler - done
+  Wifi
     done:   preferred and fallback configs
+    to-do:  add power state handler
     
-  VHF - in progress
+  VHF
     done:   serial
     done:   control object (via submodule)
     to-do:  rx handling
@@ -31,8 +32,9 @@ TEANC CORE OBJECT:
             power-on is done
             to-do: seamless transition
     
-  GPS - in progress
+  GPS
     to-do:  move into teanc library
+    to-do:  add power state handler
     
   LCD - to-do (low priority)
 
@@ -41,12 +43,16 @@ TEANC CORE OBJECT:
   
 
 EXAMPLE SKETCHES:
-  prototyped:  vhf rx -> websockets demo
-  prototyped:  gps rx -> usb serial demo
-  prototyped:  basic interfaces demo
+  done:
+    gps rx -> usb serial demo
   
-  to-do:       vhf rx -> websockets -> data file (for demod dev)
-  to-do:       vhf <-> websockets walkie-talkie
+  prototyped:
+    vhf rx -> websockets demo
+    basic interfaces demo
+  
+  to-do:
+    vhf rx -> websockets -> data file (for demod dev)
+    vhf <-> websockets walkie-talkie
   
   eventually:
     offboard (browser-based) APRS 
