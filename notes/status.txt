@@ -1,10 +1,19 @@
+Ryan's near-term goals:
+0) setup event-based framework
+1) push VHF rx i2s-in, buffering, and event handler to teanc library
+2) update VHF rx websockets demo
+3) make VHF rx websockets recorder to support offboard demod dev
+4) make VHF tx i2s-out handler
+5) make VHF mode switching via http
+6) make walkie-talkie demo
+7) begin onboard demodulation dev
 
 
 
-VHF control library - done
 
 
-TeaNC core object
+
+TEANC CORE OBJECT:
 
   Wifi handler - done
     done:   preferred and fallback configs
@@ -13,8 +22,8 @@ TeaNC core object
     done:   serial
     done:   control object (via submodule)
     to-do:  rx handling
-            done:  proof of concept
-            to-do: move into teanc library
+            done:  proof of concept (websockets example)
+            to-do: push i2s-in and buffer handling into teanc library
             to-do: rx samples-ready event handler
     to-do:  tx handling
     to-do:  mode switching
@@ -26,4 +35,40 @@ TeaNC core object
     to-do:  move into teanc library
     
   LCD - to-do (low priority)
+
+
+  
+  
+
+EXAMPLE SKETCHES:
+  prototyped:  vhf rx -> websockets demo
+  prototyped:  gps rx -> usb serial demo
+  prototyped:  basic interfaces demo
+  
+  to-do:       vhf rx -> websockets -> data file (for demod dev)
+  to-do:       vhf <-> websockets walkie-talkie
+  
+  eventually:
+    offboard (browser-based) APRS 
+    onboard APRS demodulation and igate
+    onboard APRS modulation and beacon/transponder
+    onboard APRS 2-way, KISS protocol over BLE to APRSdroid
+    multi-node team tracker
+
+  
+  
+  
+GENERAL FUNCTIONALITY:
+  Wifi multi-config handler - prototyped
+  Wifi http server
+
+  Turn GPS on and off as needed
+  Turn VHF on and off as needed
+  Turn LCD on and off as needed
+  Turn Wifi on and off as needed
+  
+  VHF tx/rx mode switching
+  KISS protocol
+
+
 
