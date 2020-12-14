@@ -1,0 +1,21 @@
+Object tree:
+
+SerialUSB
+TeaNC
+  Wifi
+    preferredCfg
+    fallbackCfg
+  VHF
+    serial
+    ctl (via sa818v submodule)
+    rx  (i2s-in, buffer)
+    tx  (i2s-out, buffer)
+  GPS
+    serial
+    rx (buffer)
+  LCD
+    display (via submodule)
+    
+    
+    
+    

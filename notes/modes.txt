@@ -1,0 +1,30 @@
+OPERATING MODE CONCEPTS:
+
+
+VHF -> websockets receiver
+  receiver/tuner html page (mostly done)
+  raw audio recorder (capture data for offboard development of demod techniques)
+  browser-based APRS receiver
+  browser-based or java APRS igate
+  
+VHF <-> websockets 2-way
+  walkie talkie html page!
+  attach to PC audio devices for use with soundmodem, etc
+
+GPS -> USB receiver (for use with programs with USB NMEA input)
+
+GPS -> Websockets -> javascript APRS modulation -> websocket -> VHF
+  Browser-based APRS beacon
+  
+GPS -> onboard APRS modulation -> VHF
+
+GPS -> morse code modulation -> VHF
+
+VHF -> aprs.fi igate
+
+VHF <-> team tracker node <- GPS
+  each station periodically reports own pos + list of nodes it heard
+
+VHF <-> Bluetooth SPP <-> APRSdroid
+
+VHF <-> VHF repeater

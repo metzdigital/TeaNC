@@ -1,0 +1,26 @@
+NOTES FOR DEVELOPERS
+
+
+
+Using Arduino IDE.
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+This project is organized as an Arduino sketchbook, with
+all libraries stored within the libraries subfolder,
+and all arduino sketches in separate folders.
+
+In Arduino IDE, you must set this project's arduino folder
+as the Sketchbook location.
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+Third-party libraries must be imported into the libraries
+folder via "git submodule add [url...]"
+
+This organization ensures all developers start with common
+libraries.
+
+Custom libraries can be added to the library folder in your
+own branch or fork of this project.  Alternatively, you can
+store sketch-specific library files in your sketch folders.

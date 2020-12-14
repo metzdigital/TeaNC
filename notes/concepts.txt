@@ -1,0 +1,34 @@
+DESIGN PHILOSOPHY:
+
+This project provides elemental building blocks for developers to 
+design their own implementations, with key examples.
+
+This project also endeavors to provide one unified firmware, with
+a menu of operating modes, configurable by web frontend.
+
+Make peripherals modular, independently selectable and configurable.
+
+Use interrupts and event handlers to minimize work in main loop.
+
+
+
+
+Imagining one firmware for all users and all operating modes...
+
+Should the teanc *always* enable Wifi for reconfiguration?
+Some operating modes may not need or want Wifi.
+Wifi can be disabled in those modes, but how do you get out of that mode?
+Maybe long button press if it's in a mode with wifi disabled?
+
+On first boot, the teanc should start in open AP mode and serve a configuration page
+which allows operators to define multiple wifi credentials with preference order.
+Need to figure out how to save credentials to Non-Volatile Storage (NVS).
+On subsequent boots, try each SSID in priority list, fall back to AP mode.
+
+When wifi is enabled, teanc main page provides menu to navigate to config page
+or select from available operating modes.
+
+Design operating modes to be modular, so they can be enabled or disabled during
+firmware build/burn.
+
+Design modular dependencies.  

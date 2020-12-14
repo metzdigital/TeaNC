@@ -1,0 +1,29 @@
+
+
+
+VHF control library - done
+
+
+TeaNC core object
+
+  Wifi handler - done
+    done:   preferred and fallback configs
+    
+  VHF - in progress
+    done:   serial
+    done:   control object (via submodule)
+    to-do:  rx handling
+            done:  proof of concept
+            to-do: move into teanc library
+            to-do: rx samples-ready event handler
+    to-do:  tx handling
+    to-do:  mode switching
+    to-do:  power control
+            power-on is done
+            to-do: seamless transition
+    
+  GPS - in progress
+    to-do:  move into teanc library
+    
+  LCD - to-do (low priority)
+
