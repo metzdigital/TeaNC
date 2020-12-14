@@ -1,4 +1,4 @@
-Object tree:
+OBJECT TREE:
 
 SerialUSB
 TeaNC
@@ -12,10 +12,51 @@ TeaNC
     tx  (i2s-out, buffer)
   GPS
     serial
-    rx (buffer)
+    rx buffer
   LCD
     display (via submodule)
     
     
     
     
+    
+FIRMWARE ORGANIZATION:
+
+  BOOT:
+  (global scope)
+
+  Via includes:
+    TeaNC constructor
+    VHF constructor
+    GPS constructor
+    …
+
+  Set TeaNC config
+  Set wifi config
+  Set vhf config
+
+  Set event callbacks:
+    Button interrupt
+    VHF samples ready
+    GPS message ready
+
+    
+  SETUP:
+    Start SerialUSB
+
+    TeaNC begin
+      If enable wifi:
+        start wifi (?)
+        Start http server
+
+      If enable VHF:
+        set VHF pins
+        start SerialVHF
+        Setup i2s-in
+        Setup i2s-out
+        Start rx sampling task with callback
+
+      If enable GPS:
+        start SerialGPS
+        Start GPS rx task
+
